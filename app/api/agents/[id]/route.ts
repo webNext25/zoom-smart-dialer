@@ -2,100 +2,59 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { agentSchema } from "@/lib/validations";
-import { z } from "zod";
 
-export async function GET(
+export async function PATCH(
     req: Request,
     { params }: { params: Promise<{ id: string }> }
 ) {
+    const { id } = await params;
     try {
         const session = await getServerSession(authOptions);
 
-        if (!session?.user) {
+        if (!session?.user?.email) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const { id } = await params;
-
-        const agent = await prisma.agent.findUnique({
-            where: { id },
-            include: {
-                knowledgeBase: true,
-                user: {
-                    select: {
-                        id: true,
-                        name: true,
-                        email: true,
-                    },
-                },
-            },
+        const user = await prisma.user.findUnique({
+            where: { email: session.user.email },
         });
 
-        if (!agent) {
-            return NextResponse.json({ error: "Agent not found" }, { status: 404 });
-        }
-
-        // Check authorization
-        if (agent.userId !== session.user.id && session.user.role !== "ADMIN") {
-            return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-        }
-
-        return NextResponse.json(agent);
-    } catch (error) {
-        console.error("Error fetching agent:", error);
-        return NextResponse.json(
-            { error: "Failed to fetch agent" },
-            { status: 500 }
-        );
-    }
-}
-
-export async function PUT(
-    req: Request,
-    { params }: { params: Promise<{ id: string }> }
-) {
-    try {
-        const session = await getServerSession(authOptions);
-
-        if (!session?.user) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
-
-        const { id } = await params;
-
-        const existingAgent = await prisma.agent.findUnique({
-            where: { id },
-        });
-
-        if (!existingAgent) {
-            return NextResponse.json({ error: "Agent not found" }, { status: 404 });
-        }
-
-        if (existingAgent.userId !== session.user.id && session.user.role !== "ADMIN") {
-            return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        if (!user) {
+            return NextResponse.json({ error: "User not found" }, { status: 404 });
         }
 
         const body = await req.json();
-        const validatedData = agentSchema.partial().parse(body);
+        const { name, provider, modelProvider, systemPrompt, firstMessage, voiceId } = body;
+
+        // Verify the agent belongs to the user
+        const existingAgent = await prisma.agent.findFirst({
+            where: {
+                id: id,
+                userId: user.id,
+            },
+        });
+
+        if (!existingAgent) {
+            return NextResponse.json(
+                { error: "Agent not found or unauthorized" },
+                { status: 404 }
+            );
+        }
 
         const agent = await prisma.agent.update({
-            where: { id },
-            data: validatedData,
-            include: {
-                knowledgeBase: true,
+            where: { id: id },
+            data: {
+                ...(name && { name }),
+                ...(provider && { provider }),
+                ...(modelProvider && { modelProvider }),
+                ...(systemPrompt && { systemPrompt }),
+                ...(firstMessage && { firstMessage }),
+                ...(voiceId !== undefined && { voiceId }),
             },
         });
 
         return NextResponse.json(agent);
     } catch (error) {
-        if (error instanceof z.ZodError) {
-            return NextResponse.json(
-                { error: "Validation failed", details: error.issues },
-                { status: 400 }
-            );
-        }
-
         console.error("Error updating agent:", error);
         return NextResponse.json(
             { error: "Failed to update agent" },
@@ -108,29 +67,39 @@ export async function DELETE(
     req: Request,
     { params }: { params: Promise<{ id: string }> }
 ) {
+    const { id } = await params;
     try {
         const session = await getServerSession(authOptions);
 
-        if (!session?.user) {
+        if (!session?.user?.email) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const { id } = await params;
-
-        const agent = await prisma.agent.findUnique({
-            where: { id },
+        const user = await prisma.user.findUnique({
+            where: { email: session.user.email },
         });
 
-        if (!agent) {
-            return NextResponse.json({ error: "Agent not found" }, { status: 404 });
+        if (!user) {
+            return NextResponse.json({ error: "User not found" }, { status: 404 });
         }
 
-        if (agent.userId !== session.user.id && session.user.role !== "ADMIN") {
-            return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        // Verify the agent belongs to the user
+        const existingAgent = await prisma.agent.findFirst({
+            where: {
+                id: id,
+                userId: user.id,
+            },
+        });
+
+        if (!existingAgent) {
+            return NextResponse.json(
+                { error: "Agent not found or unauthorized" },
+                { status: 404 }
+            );
         }
 
         await prisma.agent.delete({
-            where: { id },
+            where: { id: id },
         });
 
         return NextResponse.json({ success: true });

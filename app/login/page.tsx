@@ -1,32 +1,42 @@
 "use client";
 
 import { useState } from "react";
-import { useStore } from "@/lib/store";
+import { signIn } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 
 export default function LoginPage() {
-    const { users, setCurrentUser } = useStore();
     const router = useRouter();
     const [email, setEmail] = useState("");
-    const [error, setError] = useState("");
+    const [password, setPassword] = useState("");
+    const [isLoading, setIsLoading] = useState(false);
 
-    const handleLogin = (e: React.FormEvent) => {
+    const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
-        const user = users.find((u) => u.email === email);
+        setIsLoading(true);
 
-        if (user) {
-            setCurrentUser(user);
-            if (user.role === "admin") {
-                router.push("/admin/customers");
+        try {
+            const result = await signIn("credentials", {
+                email,
+                password,
+                redirect: false,
+            });
+
+            if (result?.error) {
+                toast.error("Invalid credentials");
             } else {
-                router.push("/dashboard/dialer");
+                toast.success("Logged in successfully");
+                // Refresh to trigger session update and let AuthProvider handle redirect
+                router.refresh();
             }
-        } else {
-            setError("User not found. Try 'admin@example.com' or 'customer@example.com'");
+        } catch (error) {
+            toast.error("Something went wrong");
+        } finally {
+            setIsLoading(false);
         }
     };
 
@@ -36,7 +46,7 @@ export default function LoginPage() {
                 <CardHeader>
                     <CardTitle>Sign In</CardTitle>
                     <CardDescription>
-                        Enter your email to access the platform.
+                        Enter your credentials to access the platform.
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -52,14 +62,24 @@ export default function LoginPage() {
                                 required
                             />
                         </div>
-                        {error && <p className="text-sm text-destructive">{error}</p>}
-                        <Button type="submit" className="w-full">
-                            Sign In
+                        <div className="space-y-2">
+                            <Label htmlFor="password">Password</Label>
+                            <Input
+                                id="password"
+                                type="password"
+                                placeholder="••••••••"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                required
+                            />
+                        </div>
+                        <Button type="submit" className="w-full" disabled={isLoading}>
+                            {isLoading ? "Signing in..." : "Sign In"}
                         </Button>
                         <div className="mt-4 text-xs text-muted-foreground text-center">
                             <p>Demo Credentials:</p>
-                            <p>Admin: admin@example.com</p>
-                            <p>Customer: customer@example.com</p>
+                            <p>Admin: admin@example.com / password123</p>
+                            <p>Customer: customer@example.com / password123</p>
                         </div>
                     </form>
                 </CardContent>

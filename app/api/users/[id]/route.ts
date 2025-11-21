@@ -3,47 +3,51 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
-export async function PUT(
+export async function PATCH(
     req: Request,
     { params }: { params: Promise<{ id: string }> }
 ) {
+    const { id } = await params;
     try {
         const session = await getServerSession(authOptions);
 
-        if (!session?.user) {
+        if (!session?.user?.email) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const { id } = await params;
+        // Get current user
+        const currentUser = await prisma.user.findUnique({
+            where: { email: session.user.email }
+        });
 
-        // Users can update themselves, admins can update anyone
-        if (session.user.id !== id && session.user.role !== "ADMIN") {
+        if (!currentUser) {
+            return NextResponse.json({ error: "User not found" }, { status: 404 });
+        }
+
+        // Allow if admin OR editing own profile
+        const isAdmin = currentUser.role === "ADMIN";
+        const isOwnProfile = currentUser.id === id;
+
+        if (!isAdmin && !isOwnProfile) {
             return NextResponse.json({ error: "Forbidden" }, { status: 403 });
         }
 
         const body = await req.json();
-        const { name, maxMinutes, usedMinutes } = body;
+        const { name, email, role, maxMinutes } = body;
 
+        // Non-admin can't change role or maxMinutes
         const updateData: any = {};
         if (name) updateData.name = name;
+        if (email) updateData.email = email;
 
-        // Only admins can update limits
-        if (session.user.role === "ADMIN") {
+        if (isAdmin) {
+            if (role) updateData.role = role;
             if (maxMinutes !== undefined) updateData.maxMinutes = maxMinutes;
-            if (usedMinutes !== undefined) updateData.usedMinutes = usedMinutes;
         }
 
         const user = await prisma.user.update({
             where: { id },
             data: updateData,
-            select: {
-                id: true,
-                name: true,
-                email: true,
-                role: true,
-                maxMinutes: true,
-                usedMinutes: true,
-            },
         });
 
         return NextResponse.json(user);
@@ -51,6 +55,40 @@ export async function PUT(
         console.error("Error updating user:", error);
         return NextResponse.json(
             { error: "Failed to update user" },
+            { status: 500 }
+        );
+    }
+}
+
+export async function DELETE(
+    req: Request,
+    { params }: { params: Promise<{ id: string }> }
+) {
+    const { id } = await params;
+    try {
+        const session = await getServerSession(authOptions);
+
+        if (!session?.user || session.user.role !== "ADMIN") {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
+
+        // Don't allow deleting yourself
+        if (session.user.id === id) {
+            return NextResponse.json(
+                { error: "Cannot delete your own account" },
+                { status: 400 }
+            );
+        }
+
+        await prisma.user.delete({
+            where: { id: id },
+        });
+
+        return NextResponse.json({ success: true });
+    } catch (error) {
+        console.error("Error deleting user:", error);
+        return NextResponse.json(
+            { error: "Failed to delete user" },
             { status: 500 }
         );
     }

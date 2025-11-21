@@ -2,28 +2,46 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Users, Mic, Settings, LogOut } from "lucide-react";
+import { Users, Mic, Settings, LogOut, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { useStore } from "@/lib/store";
+import { useSession, signOut } from "next-auth/react";
+import { useEffect } from "react";
 
 export default function AdminLayout({
     children,
 }: {
     children: React.ReactNode;
 }) {
+    const { data: session, status } = useSession();
     const pathname = usePathname();
     const router = useRouter();
-    const { setCurrentUser } = useStore();
 
-    const handleLogout = () => {
-        setCurrentUser(null);
-        router.push("/login");
+    useEffect(() => {
+        if (status === "loading") return;
+
+        if (status === "unauthenticated") {
+            router.push("/login");
+            return;
+        }
+
+        if (session?.user?.role !== "ADMIN") {
+            router.push("/dashboard/dialer");
+        }
+    }, [session, status, router]);
+
+    const handleLogout = async () => {
+        await signOut({ callbackUrl: "/login" });
     };
+
+    if (status === "loading") {
+        return <div className="flex h-screen items-center justify-center">Loading...</div>;
+    }
 
     const navItems = [
         { href: "/admin/customers", label: "Customers", icon: Users },
         { href: "/admin/voices", label: "Voices & Providers", icon: Mic },
+        { href: "/admin/templates", label: "Templates", icon: FileText },
         { href: "/admin/settings", label: "Settings", icon: Settings },
     ];
 

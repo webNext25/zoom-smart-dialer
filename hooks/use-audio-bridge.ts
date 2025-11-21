@@ -1,32 +1,85 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import Vapi from "@vapi-ai/web";
+import { useSetting } from "@/hooks/use-settings";
+
+interface Agent {
+    id: string;
+    name: string;
+    provider: string;
+    modelProvider: string;
+    systemPrompt: string;
+    firstMessage: string;
+    voiceId: string;
+}
+
+interface CallRecordingData {
+    phoneNumber: string;
+    duration: number;
+    transcript: string;
+    sentiment?: string;
+}
 
 export function useAudioBridge() {
     const [isBridgeActive, setIsBridgeActive] = useState(false);
-    const [isMicEnabled, setIsMicEnabled] = useState(false);
-    const [isMonitoring, setIsMonitoring] = useState(false);
-    const [transcript, setTranscript] = useState<{ role: "agent" | "user"; text: string }[]>([]);
+    const [transcript, setTranscript] = useState<{ role: "agent" | "user"; text: string; timestamp: Date }[]>([]);
+    const [callDuration, setCallDuration] = useState(0);
+
+    // Load Vapi key from database settings
+    const { value: vapiKey } = useSetting("vapi.publicKey", process.env.NEXT_PUBLIC_VAPI_KEY || "");
+    const { value: defaultVoiceId } = useSetting("elevenlabs.defaultVoiceId", process.env.NEXT_PUBLIC_ELEVENLABS_VOICE_ID || "bIHbv24MWmeRgasZH58o");
 
     const vapiRef = useRef<Vapi | null>(null);
-    const audioContextRef = useRef<AudioContext | null>(null);
+    const callStartTimeRef = useRef<Date | null>(null);
+    const durationIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
     // Initialize Vapi client
     useEffect(() => {
-        // Replace with your actual Vapi public key
-        const VAPI_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPI_KEY || "your-vapi-public-key-here";
+        if (!vapiKey) {
+            console.warn("Vapi key not configured");
+            return;
+        }
 
-        vapiRef.current = new Vapi(VAPI_PUBLIC_KEY);
+        vapiRef.current = new Vapi(vapiKey);
 
         // Set up event listeners
         vapiRef.current.on("call-start", () => {
             console.log("Vapi call started");
             setIsBridgeActive(true);
+            callStartTimeRef.current = new Date();
+
+            // Start duration timer
+            durationIntervalRef.current = setInterval(() => {
+                if (callStartTimeRef.current) {
+                    const elapsed = Math.floor((Date.now() - callStartTimeRef.current.getTime()) / 1000);
+                    setCallDuration(elapsed);
+                }
+            }, 1000);
         });
 
-        vapiRef.current.on("call-end", () => {
+        vapiRef.current.on("call-end", async () => {
             console.log("Vapi call ended");
             setIsBridgeActive(false);
+
+            // Stop duration timer
+            if (durationIntervalRef.current) {
+                clearInterval(durationIntervalRef.current);
+                durationIntervalRef.current = null;
+            }
+
+            // Save recording to database
+            if (transcript.length > 0) {
+                await saveCallRecording({
+                    phoneNumber: "Unknown", // Will be populated from call context
+                    duration: callDuration,
+                    transcript: transcript.map(t => `${t.role}: ${t.text}`).join("\n"),
+                    sentiment: "neutral",
+                });
+            }
+
+            // Reset state
             setTranscript([]);
+            setCallDuration(0);
+            callStartTimeRef.current = null;
         });
 
         vapiRef.current.on("speech-start", () => {
@@ -38,10 +91,13 @@ export function useAudioBridge() {
         });
 
         vapiRef.current.on("message", (message: any) => {
-            if (message.type === "transcript") {
+            console.log("Vapi message:", message);
+
+            if (message.type === "transcript" && message.transcript) {
                 setTranscript(prev => [...prev, {
                     role: message.role === "assistant" ? "agent" : "user",
-                    text: message.transcript
+                    text: message.transcript,
+                    timestamp: new Date()
                 }]);
             }
         });
@@ -54,70 +110,94 @@ export function useAudioBridge() {
             if (vapiRef.current) {
                 vapiRef.current.stop();
             }
+            if (durationIntervalRef.current) {
+                clearInterval(durationIntervalRef.current);
+            }
         };
     }, []);
 
-    const startBridge = async (zoomStream?: MediaStream, aiStream?: MediaStream) => {
+    const saveCallRecording = async (data: CallRecordingData) => {
+        try {
+            const response = await fetch("/api/recordings", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    phoneNumber: data.phoneNumber,
+                    duration: data.duration,
+                    transcript: data.transcript,
+                    sentiment: data.sentiment || "neutral",
+                    audioUrl: null,
+                    highlights: { /* Can be populated from Vapi analytics */ }
+                }),
+            });
+
+            if (!response.ok) {
+                throw new Error("Failed to save recording");
+            }
+
+            console.log("Call recording saved successfully");
+        } catch (error) {
+            console.error("Error saving call recording:", error);
+        }
+    };
+
+    const startCall = useCallback(async (agent: Agent, phoneNumber: string) => {
         if (!vapiRef.current) {
             console.error("Vapi client not initialized");
             return;
         }
 
         try {
-            // Start Vapi call with inline assistant configuration
-            // Type assertion for Vapi configuration
+            // Start Vapi call with agent configuration
             await vapiRef.current.start({
                 assistant: {
-                    firstMessage: "Hello! How can I help you today?",
+                    firstMessage: agent.firstMessage,
                     model: {
-                        provider: "openai",
-                        model: "gpt-4",
+                        provider: agent.provider as any,
+                        model: agent.modelProvider,
                         messages: [{
                             role: "system",
-                            content: "You are a helpful assistant."
+                            content: agent.systemPrompt
                         }]
                     },
                     voice: {
                         provider: "11labs",
-                        voiceId: process.env.NEXT_PUBLIC_ELEVENLABS_VOICE_ID || "bIHbv24MWmeRgasZH58o"
+                        voiceId: agent.voiceId || defaultVoiceId
                     }
-                }
+                },
+                // Optional: Add phone number for outbound calls
+                // phoneNumberId: "your-vapi-phone-number-id"
             } as any);
 
             setIsBridgeActive(true);
-            setIsMonitoring(true);
-            setIsMicEnabled(false); // AI starts with control
         } catch (error) {
             console.error("Failed to start Vapi call:", error);
+            throw error;
         }
-    };
+    }, []);
 
-    const stopBridge = () => {
+    const stopCall = useCallback(() => {
         if (vapiRef.current) {
             vapiRef.current.stop();
         }
         setIsBridgeActive(false);
-        setIsMonitoring(false);
-        setTranscript([]);
-    };
+    }, []);
 
-    const toggleMic = () => {
-        if (!vapiRef.current) return;
-
-        const newMicState = !isMicEnabled;
-        setIsMicEnabled(newMicState);
-
-        // Mute/unmute Vapi
-        vapiRef.current.setMuted(!newMicState);
-    };
+    const toggleMute = useCallback(() => {
+        if (vapiRef.current) {
+            const isMuted = vapiRef.current.isMuted();
+            vapiRef.current.setMuted(!isMuted);
+            return !isMuted;
+        }
+        return false;
+    }, []);
 
     return {
         isBridgeActive,
-        isMicEnabled,
-        isMonitoring,
         transcript,
-        startBridge,
-        stopBridge,
-        toggleMic,
+        callDuration,
+        startCall,
+        stopCall,
+        toggleMute,
     };
 }

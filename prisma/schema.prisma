@@ -48,6 +48,7 @@ model Agent {
   updatedAt      DateTime @updatedAt
   
   @@index([userId])
+  @@index([userId, createdAt])
 }
 
 model Voice {
@@ -93,6 +94,27 @@ model CallRecording {
   
   @@index([userId])
   @@index([createdAt])
+  @@index([userId, sentiment])
+  @@index([userId, createdAt])
+}
+
+model Template {
+  id            String   @id @default(cuid())
+  name          String
+  description   String
+  category      String
+  provider      String   @default("vapi")
+  modelProvider String   @default("openai")
+  systemPrompt  String   @db.Text
+  firstMessage  String
+  isPublic      Boolean  @default(true)
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@index([category])
+  @@index([isPublic])
+  @@index([category, isPublic])
 }
 
 model Session {
@@ -106,6 +128,20 @@ model Session {
   
   @@index([userId])
   @@index([sessionToken])
+}
+
+model SystemSettings {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String   @db.Text // Encrypted value
+  category  String   // "ai", "voice", "zoom", "upload"
+  isPublic  Boolean  @default(false) // If true, exposed to client
+  updatedAt DateTime @updatedAt
+  updatedBy String?  // Admin user ID who last updated
+  
+  @@index([category])
+  @@index([isPublic])
+  @@map("system_settings")
 }
 
 enum Role {

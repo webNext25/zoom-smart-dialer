@@ -2,40 +2,26 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { agentSchema } from "@/lib/validations";
-import { z } from "zod";
 
 export async function GET(req: Request) {
     try {
         const session = await getServerSession(authOptions);
 
-        if (!session?.user) {
+        if (!session?.user?.email) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const { searchParams } = new URL(req.url);
-        const userId = searchParams.get("userId");
+        const user = await prisma.user.findUnique({
+            where: { email: session.user.email },
+        });
 
-        // Admin can see all agents, customers only their own
-        const where = session.user.role === "ADMIN" && userId
-            ? { userId }
-            : { userId: session.user.id };
+        if (!user) {
+            return NextResponse.json({ error: "User not found" }, { status: 404 });
+        }
 
         const agents = await prisma.agent.findMany({
-            where,
-            include: {
-                user: {
-                    select: {
-                        id: true,
-                        name: true,
-                        email: true,
-                    },
-                },
-                knowledgeBase: true,
-            },
-            orderBy: {
-                createdAt: "desc",
-            },
+            where: { userId: user.id },
+            orderBy: { createdAt: "desc" },
         });
 
         return NextResponse.json(agents);
@@ -52,32 +38,42 @@ export async function POST(req: Request) {
     try {
         const session = await getServerSession(authOptions);
 
-        if (!session?.user) {
+        if (!session?.user?.email) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
+        const user = await prisma.user.findUnique({
+            where: { email: session.user.email },
+        });
+
+        if (!user) {
+            return NextResponse.json({ error: "User not found" }, { status: 404 });
+        }
+
         const body = await req.json();
-        const validatedData = agentSchema.parse(body);
+        const { name, provider, modelProvider, systemPrompt, firstMessage, voiceId } = body;
+
+        if (!name || !provider || !modelProvider || !systemPrompt || !firstMessage) {
+            return NextResponse.json(
+                { error: "Missing required fields" },
+                { status: 400 }
+            );
+        }
 
         const agent = await prisma.agent.create({
             data: {
-                ...validatedData,
-                userId: session.user.id,
-            },
-            include: {
-                knowledgeBase: true,
+                userId: user.id,
+                name,
+                provider,
+                modelProvider,
+                systemPrompt,
+                firstMessage,
+                voiceId: voiceId || "", // Allow empty string
             },
         });
 
         return NextResponse.json(agent, { status: 201 });
     } catch (error) {
-        if (error instanceof z.ZodError) {
-            return NextResponse.json(
-                { error: "Validation failed", details: error.issues },
-                { status: 400 }
-            );
-        }
-
         console.error("Error creating agent:", error);
         return NextResponse.json(
             { error: "Failed to create agent" },

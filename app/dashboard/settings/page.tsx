@@ -1,32 +1,44 @@
 "use client";
 
-import { useStore } from "@/lib/store";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useState, useEffect } from "react";
+import useSWR, { mutate } from "swr";
+import { toast } from "sonner";
+
+const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
 export default function AccountSettingsPage() {
-    const { currentUser, users, updateUser } = useStore();
+    const { data: user, error, isLoading } = useSWR("/api/users/me", fetcher);
     const [name, setName] = useState("");
-    const [email, setEmail] = useState("");
 
     useEffect(() => {
-        if (currentUser) {
-            setName(currentUser.name);
-            setEmail(currentUser.email);
+        if (user) {
+            setName(user.name);
         }
-    }, [currentUser]);
+    }, [user]);
 
-    const handleSave = () => {
-        if (currentUser) {
-            updateUser(currentUser.id, { name });
-            alert("Profile updated successfully!");
+    const handleSave = async () => {
+        try {
+            const res = await fetch("/api/users/me", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name }),
+            });
+
+            if (!res.ok) throw new Error("Failed to update");
+
+            toast.success("Profile updated successfully!");
+            mutate("/api/users/me");
+        } catch (error) {
+            toast.error("Failed to update profile");
         }
     };
 
-    if (!currentUser) return null;
+    if (isLoading) return <div>Loading...</div>;
+    if (error) return <div>Error loading profile</div>;
 
     return (
         <div className="space-y-6 max-w-4xl mx-auto">
@@ -44,7 +56,7 @@ export default function AccountSettingsPage() {
                     </div>
                     <div className="space-y-2">
                         <Label>Email Address</Label>
-                        <Input value={email} disabled className="bg-muted" />
+                        <Input value={user?.email || ""} disabled className="bg-muted" />
                         <p className="text-xs text-muted-foreground">Email cannot be changed.</p>
                     </div>
                     <Button onClick={handleSave}>Save Changes</Button>
@@ -60,21 +72,21 @@ export default function AccountSettingsPage() {
                     <div className="grid grid-cols-2 gap-4">
                         <div className="p-4 border rounded-lg bg-muted/50">
                             <p className="text-sm font-medium text-muted-foreground">Used Minutes</p>
-                            <p className="text-2xl font-bold">{currentUser.limits?.usedMinutes || 0}</p>
+                            <p className="text-2xl font-bold">{user?.usedMinutes || 0}</p>
                         </div>
                         <div className="p-4 border rounded-lg bg-muted/50">
                             <p className="text-sm font-medium text-muted-foreground">Max Minutes</p>
-                            <p className="text-2xl font-bold">{currentUser.limits?.maxMinutes || 0}</p>
+                            <p className="text-2xl font-bold">{user?.maxMinutes || 0}</p>
                         </div>
                     </div>
                     <div className="w-full bg-secondary h-2 rounded-full overflow-hidden">
                         <div
                             className="bg-primary h-full transition-all"
-                            style={{ width: `${Math.min(((currentUser.limits?.usedMinutes || 0) / (currentUser.limits?.maxMinutes || 1)) * 100, 100)}%` }}
+                            style={{ width: `${Math.min(((user?.usedMinutes || 0) / (user?.maxMinutes || 1)) * 100, 100)}%` }}
                         />
                     </div>
                     <p className="text-xs text-muted-foreground text-right">
-                        {Math.round(((currentUser.limits?.usedMinutes || 0) / (currentUser.limits?.maxMinutes || 1)) * 100)}% used
+                        {Math.round(((user?.usedMinutes || 0) / (user?.maxMinutes || 1)) * 100)}% used
                     </p>
                 </CardContent>
             </Card>

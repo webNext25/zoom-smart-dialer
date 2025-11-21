@@ -1,39 +1,44 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useStore } from "@/lib/store";
+import { SessionProvider, useSession } from "next-auth/react";
 import { useRouter, usePathname } from "next/navigation";
+import { useEffect } from "react";
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
-    const { currentUser, isLoading } = useStore();
+function AuthGuard({ children }: { children: React.ReactNode }) {
+    const { data: session, status } = useSession();
     const router = useRouter();
     const pathname = usePathname();
-    const [mounted, setMounted] = useState(false);
 
     useEffect(() => {
-        setMounted(true);
-    }, []);
-
-    useEffect(() => {
-        if (!mounted) return;
+        if (status === "loading") return;
 
         const isAuthRoute = pathname.startsWith("/login") || pathname.startsWith("/register");
         const isPublicRoute = pathname === "/";
 
-        if (!currentUser && !isAuthRoute && !isPublicRoute) {
+        if (status === "unauthenticated" && !isAuthRoute && !isPublicRoute) {
             router.push("/login");
         }
 
-        if (currentUser && isAuthRoute) {
-            if (currentUser.role === "admin") {
+        if (status === "authenticated" && isAuthRoute) {
+            if (session?.user?.role === "ADMIN") {
                 router.push("/admin/customers");
             } else {
                 router.push("/dashboard/dialer");
             }
         }
-    }, [currentUser, pathname, router, mounted]);
+    }, [session, status, pathname, router]);
 
-    if (!mounted) return null;
+    if (status === "loading") {
+        return <div className="flex h-screen items-center justify-center">Loading...</div>;
+    }
 
     return <>{children}</>;
+}
+
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+    return (
+        <SessionProvider>
+            <AuthGuard>{children}</AuthGuard>
+        </SessionProvider>
+    );
 }

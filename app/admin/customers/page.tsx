@@ -16,11 +16,11 @@ import { toast } from "sonner";
 import useSWR, { mutate } from "swr";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
-export default function CustomersPage() {
+export default function AdminCustomersPage() {
     const { data: users, error, isLoading } = useSWR("/api/users", fetcher);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [limitInput, setLimitInput] = useState<number>(0);
@@ -29,6 +29,7 @@ export default function CustomersPage() {
         name: "",
         email: "",
         password: "",
+        confirmPassword: "",
         maxMinutes: 100,
     });
 
@@ -42,7 +43,7 @@ export default function CustomersPage() {
     const handleSaveLimit = async (userId: string) => {
         try {
             const res = await fetch(`/api/users/${userId}`, {
-                method: "PUT",
+                method: "PATCH",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ maxMinutes: limitInput }),
             });
@@ -59,12 +60,22 @@ export default function CustomersPage() {
 
     const handleAddCustomer = async (e: React.FormEvent) => {
         e.preventDefault();
+
+        // Validate passwords match
+        if (newUser.password !== newUser.confirmPassword) {
+            toast.error("Passwords do not match");
+            return;
+        }
+
         try {
             const res = await fetch("/api/users", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    ...newUser,
+                    name: newUser.name,
+                    email: newUser.email,
+                    password: newUser.password,
+                    maxMinutes: newUser.maxMinutes,
                     role: "CUSTOMER",
                 }),
             });
@@ -76,15 +87,55 @@ export default function CustomersPage() {
 
             toast.success("Customer created successfully");
             setIsAddOpen(false);
-            setNewUser({ name: "", email: "", password: "", maxMinutes: 100 });
+            setNewUser({ name: "", email: "", password: "", confirmPassword: "", maxMinutes: 100 });
             mutate("/api/users");
         } catch (error: any) {
             toast.error(error.message);
         }
     };
 
-    if (isLoading) return <div>Loading...</div>;
+    const handleDeleteCustomer = async (userId: string, name: string) => {
+        if (confirm(`Delete customer ${name}?`)) {
+            try {
+                const res = await fetch(`/api/users/${userId}`, {
+                    method: "DELETE",
+                });
+                if (!res.ok) throw new Error("Failed to delete");
+                toast.success("Customer deleted");
+                mutate("/api/users");
+            } catch (error) {
+                toast.error("Failed to delete customer");
+            }
+        }
+    };
+
     if (error) return <div>Error loading users</div>;
+
+    // Loading state
+    if (isLoading) {
+        return (
+            <div className="space-y-6">
+                <div className="flex justify-between items-center">
+                    <Skeleton className="h-10 w-48" />
+                    <Skeleton className="h-10 w-32" />
+                </div>
+                <Card>
+                    <CardHeader>
+                        <Skeleton className="h-6 w-48" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="space-y-4">
+                            {[1, 2, 3, 4].map((i) => (
+                                <div key={i} className="flex gap-4">
+                                    <Skeleton className="h-6 flex-1" />
+                                </div>
+                            ))}
+                        </div>
+                    </CardContent>
+                </Card>
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-6">
@@ -129,6 +180,16 @@ export default function CustomersPage() {
                                 />
                             </div>
                             <div className="space-y-2">
+                                <Label htmlFor="confirmPassword">Confirm Password</Label>
+                                <Input
+                                    id="confirmPassword"
+                                    type="password"
+                                    value={newUser.confirmPassword}
+                                    onChange={(e) => setNewUser({ ...newUser, confirmPassword: e.target.value })}
+                                    required
+                                />
+                            </div>
+                            <div className="space-y-2">
                                 <Label htmlFor="minutes">Monthly Minute Limit</Label>
                                 <Input
                                     id="minutes"
@@ -154,8 +215,8 @@ export default function CustomersPage() {
                             <TableRow>
                                 <TableHead>Name</TableHead>
                                 <TableHead>Email</TableHead>
-                                <TableHead>Usage (Min)</TableHead>
-                                <TableHead>Limit (Min)</TableHead>
+                                <TableHead>Usage</TableHead>
+                                <TableHead>Limit (mins)</TableHead>
                                 <TableHead>Actions</TableHead>
                             </TableRow>
                         </TableHeader>
@@ -164,40 +225,58 @@ export default function CustomersPage() {
                                 <TableRow key={customer.id}>
                                     <TableCell className="font-medium">{customer.name}</TableCell>
                                     <TableCell>{customer.email}</TableCell>
-                                    <TableCell>{customer.usedMinutes || 0}</TableCell>
                                     <TableCell>
-                                        {editingId === customer.id ? (
-                                            <Input
-                                                type="number"
-                                                value={limitInput}
-                                                onChange={(e) => setLimitInput(Number(e.target.value))}
-                                                className="w-24 h-8"
-                                            />
-                                        ) : (
-                                            customer.maxMinutes || 0
-                                        )}
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-24 bg-secondary h-2 rounded-full overflow-hidden">
+                                                <div
+                                                    className="bg-primary h-full"
+                                                    style={{
+                                                        width: `${Math.min((customer.usedMinutes / customer.maxMinutes) * 100, 100)}%`,
+                                                    }}
+                                                />
+                                            </div>
+                                            <span className="text-xs text-muted-foreground">
+                                                {customer.usedMinutes}/{customer.maxMinutes}
+                                            </span>
+                                        </div>
                                     </TableCell>
                                     <TableCell>
                                         {editingId === customer.id ? (
-                                            <div className="flex gap-2">
-                                                <Button size="sm" onClick={() => handleSaveLimit(customer.id)}>Save</Button>
-                                                <Button size="sm" variant="ghost" onClick={() => setEditingId(null)}>Cancel</Button>
+                                            <div className="flex items-center gap-2">
+                                                <Input
+                                                    type="number"
+                                                    value={limitInput}
+                                                    onChange={(e) => setLimitInput(Number(e.target.value))}
+                                                    className="w-20"
+                                                />
+                                                <Button size="sm" onClick={() => handleSaveLimit(customer.id)}>
+                                                    Save
+                                                </Button>
+                                                <Button size="sm" variant="ghost" onClick={() => setEditingId(null)}>
+                                                    Cancel
+                                                </Button>
                                             </div>
                                         ) : (
-                                            <Button size="sm" variant="outline" onClick={() => handleEditLimit(customer)}>
-                                                Edit Limit
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                onClick={() => handleEditLimit(customer)}
+                                            >
+                                                Edit
                                             </Button>
                                         )}
                                     </TableCell>
-                                </TableRow>
-                            ))}
-                            {customers.length === 0 && (
-                                <TableRow>
-                                    <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                                        No customers found.
+                                    <TableCell>
+                                        <Button
+                                            size="sm"
+                                            variant="destructive"
+                                            onClick={() => handleDeleteCustomer(customer.id, customer.name)}
+                                        >
+                                            Delete
+                                        </Button>
                                     </TableCell>
                                 </TableRow>
-                            )}
+                            ))}
                         </TableBody>
                     </Table>
                 </CardContent>

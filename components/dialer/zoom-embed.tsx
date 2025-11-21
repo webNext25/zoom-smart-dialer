@@ -3,12 +3,19 @@
 import { useEffect, useRef, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Loader2 } from "lucide-react";
+import { useSetting } from "@/hooks/use-settings";
 
 export function ZoomEmbed() {
+    const [error, setError] = useState<string | null>(null);
+    const { value: zoomClientId, isLoading } = useSetting("zoom.clientId", process.env.ZOOM_CLIENT_ID || "");
+    const { value: zoomSdkKey } = useSetting("zoom.sdkKey", process.env.ZOOM_SDK_KEY || "");
+
     const iframeRef = useRef<HTMLIFrameElement>(null);
     const [isReady, setIsReady] = useState(false);
 
     useEffect(() => {
+        if (isLoading) return;
+
         const handleMessage = (e: MessageEvent) => {
             const data = e.data;
             if (data) {
@@ -53,7 +60,23 @@ export function ZoomEmbed() {
         return () => {
             window.removeEventListener("message", handleMessage);
         };
-    }, []);
+    }, [zoomClientId, zoomSdkKey, isLoading]);
+
+    if (isLoading) {
+        return (
+            <div className="flex items-center justify-center h-full">
+                <p className="text-muted-foreground">Loading Zoom configuration...</p>
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="flex items-center justify-center h-full text-red-500">
+                <p>Error loading Zoom: {error}</p>
+            </div>
+        );
+    }
 
     return (
         <Card className="w-full h-[600px] overflow-hidden bg-black relative border-0 shadow-2xl rounded-xl">
