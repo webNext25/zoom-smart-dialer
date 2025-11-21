@@ -40,7 +40,7 @@ export default function AdminLayout({
 
     const navItems = [
         { href: "/admin/customers", label: "Customers", icon: Users },
-        { href: "/admin/voices", label: "Voices & Providers", icon: Mic },
+        { href: "/admin/voices", label: "Voices & Providers", icon: Mic2 },
         { href: "/admin/templates", label: "Templates", icon: FileText },
         { href: "/admin/settings", label: "Settings", icon: Settings },
         { href: "/dashboard/settings", label: "Profile", icon: User },
