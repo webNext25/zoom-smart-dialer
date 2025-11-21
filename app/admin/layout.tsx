@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Users, Mic, Settings, LogOut, FileText } from "lucide-react";
+import { LayoutDashboard, Users, Mic2, FileText, Settings, LogOut, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useSession, signOut } from "next-auth/react";
@@ -43,6 +43,7 @@ export default function AdminLayout({
         { href: "/admin/voices", label: "Voices & Providers", icon: Mic },
         { href: "/admin/templates", label: "Templates", icon: FileText },
         { href: "/admin/settings", label: "Settings", icon: Settings },
+        { href: "/dashboard/settings", label: "Profile", icon: User },
     ];
 
     return (

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { hash } from "bcryptjs";
 
 export async function PATCH(
     req: Request,
@@ -33,12 +34,24 @@ export async function PATCH(
         }
 
         const body = await req.json();
-        const { name, email, role, maxMinutes } = body;
+        const { name, email, role, maxMinutes, password } = body;
 
         // Non-admin can't change role or maxMinutes
         const updateData: any = {};
         if (name) updateData.name = name;
         if (email) updateData.email = email;
+
+        // Securely hash password if provided
+        if (password) {
+            // Ensure password meets minimum requirements
+            if (password.length < 6) {
+                return NextResponse.json(
+                    { error: "Password must be at least 6 characters" },
+                    { status: 400 }
+                );
+            }
+            updateData.password = await hash(password, 12);
+        }
 
         if (isAdmin) {
             if (role) updateData.role = role;

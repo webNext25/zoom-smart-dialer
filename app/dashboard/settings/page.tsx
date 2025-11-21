@@ -13,6 +13,7 @@ const fetcher = (url: string) => fetch(url).then((res) => res.json());
 export default function AccountSettingsPage() {
     const { data: user, error, isLoading } = useSWR("/api/users/me", fetcher);
     const [name, setName] = useState("");
+    const [password, setPassword] = useState("");
 
     useEffect(() => {
         if (user) {
@@ -22,15 +23,25 @@ export default function AccountSettingsPage() {
 
     const handleSave = async () => {
         try {
+            const body: any = { name };
+            if (password) {
+                if (password.length < 6) {
+                    toast.error("Password must be at least 6 characters");
+                    return;
+                }
+                body.password = password;
+            }
+
             const res = await fetch("/api/users/me", {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ name }),
+                body: JSON.stringify(body),
             });
 
             if (!res.ok) throw new Error("Failed to update");
 
             toast.success("Profile updated successfully!");
+            setPassword("");
             mutate("/api/users/me");
         } catch (error) {
             toast.error("Failed to update profile");
@@ -58,6 +69,15 @@ export default function AccountSettingsPage() {
                         <Label>Email Address</Label>
                         <Input value={user?.email || ""} disabled className="bg-muted" />
                         <p className="text-xs text-muted-foreground">Email cannot be changed.</p>
+                    </div>
+                    <div className="space-y-2">
+                        <Label>New Password</Label>
+                        <Input
+                            type="password"
+                            placeholder="Leave blank to keep current password"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                        />
                     </div>
                     <Button onClick={handleSave}>Save Changes</Button>
                 </CardContent>

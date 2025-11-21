@@ -56,7 +56,7 @@ export default function LoginPage() {
                             <Input
                                 id="email"
                                 type="email"
-                                placeholder="admin@example.com"
+                                placeholder="name@example.com"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                                 required
@@ -67,7 +67,7 @@ export default function LoginPage() {
                             <Input
                                 id="password"
                                 type="password"
-                                placeholder="••••••••"
+                                placeholder="Enter your password"
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
                                 required
@@ -76,11 +76,7 @@ export default function LoginPage() {
                         <Button type="submit" className="w-full" disabled={isLoading}>
                             {isLoading ? "Signing in..." : "Sign In"}
                         </Button>
-                        <div className="mt-4 text-xs text-muted-foreground text-center">
-                            <p>Demo Credentials:</p>
-                            <p>Admin: admin@example.com / password123</p>
-                            <p>Customer: customer@example.com / password123</p>
-                        </div>
+
                     </form>
                 </CardContent>
             </Card>
