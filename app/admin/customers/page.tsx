@@ -32,7 +32,7 @@ export default function CustomersPage() {
         maxMinutes: 100,
     });
 
-    const customers = users?.filter((u: any) => u.role === "CUSTOMER") || [];
+    const customers = Array.isArray(users) ? users.filter((u: any) => u.role === "CUSTOMER") : [];
 
     const handleEditLimit = (user: any) => {
         setEditingId(user.id);
