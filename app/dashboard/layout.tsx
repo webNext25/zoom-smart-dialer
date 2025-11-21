@@ -25,7 +25,7 @@ export default function DashboardLayout({
             return;
         }
 
-        if (session?.user?.role === "ADMIN") {
+        if (session?.user?.role === "ADMIN" && !pathname?.startsWith("/dashboard/settings")) {
             router.push("/admin/customers");
         }
     }, [session, status, router]);
