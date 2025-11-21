@@ -83,33 +83,36 @@ export default function AccountSettingsPage() {
                 </CardContent>
             </Card>
 
-            <Card>
-                <CardHeader>
-                    <CardTitle>Usage & Limits</CardTitle>
-                    <CardDescription>View your current plan usage.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="p-4 border rounded-lg bg-muted/50">
-                            <p className="text-sm font-medium text-muted-foreground">Used Minutes</p>
-                            <p className="text-2xl font-bold">{user?.usedMinutes || 0}</p>
+
+            {user?.role !== "ADMIN" && (
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Usage & Limits</CardTitle>
+                        <CardDescription>View your current plan usage.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="p-4 border rounded-lg bg-muted/50">
+                                <p className="text-sm font-medium text-muted-foreground">Used Minutes</p>
+                                <p className="text-2xl font-bold">{user?.usedMinutes || 0}</p>
+                            </div>
+                            <div className="p-4 border rounded-lg bg-muted/50">
+                                <p className="text-sm font-medium text-muted-foreground">Max Minutes</p>
+                                <p className="text-2xl font-bold">{user?.maxMinutes || 0}</p>
+                            </div>
                         </div>
-                        <div className="p-4 border rounded-lg bg-muted/50">
-                            <p className="text-sm font-medium text-muted-foreground">Max Minutes</p>
-                            <p className="text-2xl font-bold">{user?.maxMinutes || 0}</p>
+                        <div className="w-full bg-secondary h-2 rounded-full overflow-hidden">
+                            <div
+                                className="bg-primary h-full transition-all"
+                                style={{ width: `${Math.min(((user?.usedMinutes || 0) / (user?.maxMinutes || 1)) * 100, 100)}%` }}
+                            />
                         </div>
-                    </div>
-                    <div className="w-full bg-secondary h-2 rounded-full overflow-hidden">
-                        <div
-                            className="bg-primary h-full transition-all"
-                            style={{ width: `${Math.min(((user?.usedMinutes || 0) / (user?.maxMinutes || 1)) * 100, 100)}%` }}
-                        />
-                    </div>
-                    <p className="text-xs text-muted-foreground text-right">
-                        {Math.round(((user?.usedMinutes || 0) / (user?.maxMinutes || 1)) * 100)}% used
-                    </p>
-                </CardContent>
-            </Card>
+                        <p className="text-xs text-muted-foreground text-right">
+                            {Math.round(((user?.usedMinutes || 0) / (user?.maxMinutes || 1)) * 100)}% used
+                        </p>
+                    </CardContent>
+                </Card>
+            )}
         </div>
     );
 }
